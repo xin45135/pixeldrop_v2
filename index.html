@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<title>PixelDrop</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Nunito:wght@600;800&display=swap');
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+
+/* ── Scroll / overscroll lock (CSS layer) ─────────────── */
+html{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;touch-action:none;background:#0a0a10}
+body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;touch-action:none;
+     font-family:'Nunito',sans-serif;background:#0a0a10;color:#ece8ff;
+     user-select:none;-webkit-user-select:none;display:flex;align-items:center;justify-content:center}
+
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:radial-gradient(ellipse 60% 40% at 18% 6%,#1a0f40 0%,transparent 65%),
+             radial-gradient(ellipse 50% 40% at 82% 94%,#0b1e34 0%,transparent 65%)}
+
+/* ── App shell ─────────────────────────────────────────── */
+#app{position:relative;z-index:1;width:100%;max-width:430px;
+     height:100vh;height:100dvh;display:flex;flex-direction:column;
+     align-items:center;padding:0 10px;overflow:hidden;
+     touch-action:none;overscroll-behavior:none}
+
+/* ── Top bar ──────────────────────────────────────────── */
+#topbar{width:100%;display:flex;align-items:center;justify-content:space-between;
+        padding:8px 2px 3px;flex-shrink:0}
+.title{font-family:'Silkscreen',monospace;font-size:clamp(14px,4vw,20px);
+       letter-spacing:3px;color:#9d7ff5;text-shadow:0 0 20px #9d7ff545}
+.lv-pill{font-family:'Silkscreen',monospace;font-size:9px;letter-spacing:1px;
+         color:#5e5a7a;background:#13131e;border:1px solid #28283c;
+         padding:4px 9px;border-radius:20px}
+
+/* ── Stats + buttons ──────────────────────────────────── */
+#meta-row{width:100%;display:flex;align-items:center;justify-content:space-between;
+          padding:1px 2px 4px;gap:6px;flex-shrink:0}
+.stat{display:flex;flex-direction:column;gap:1px;min-width:40px}
+.stat-lbl{font-family:'Silkscreen',monospace;font-size:7px;letter-spacing:1px;color:#5e5a7a}
+.stat-val{font-family:'Silkscreen',monospace;font-size:13px;color:#ece8ff}
+.stat-val.g{color:#3ef09a}.stat-val.a{color:#9d7ff5}
+.act-row{display:flex;gap:5px}
+.abtn{font-family:'Silkscreen',monospace;font-size:8px;letter-spacing:.3px;
+      padding:6px 9px;background:#13131e;border:1px solid #28283c;
+      color:#5e5a7a;border-radius:7px;cursor:pointer;
+      display:flex;align-items:center;gap:3px;
+      transition:background .1s,color .1s,border-color .1s;touch-action:manipulation}
+.abtn:active{background:#1c1c2b;color:#ece8ff}
+.abtn.u{border-color:#9d7ff550;color:#9d7ff5}.abtn.u:active{background:#1a1040}
+.abtn.r{border-color:#ff5f5f44;color:#ff8888}.abtn.r:active{background:#2a1020}
+.abtn:disabled{opacity:.3;pointer-events:none}
+
+/* ── Level name ───────────────────────────────────────── */
+#lv-name{font-family:'Silkscreen',monospace;font-size:8px;letter-spacing:2px;
+         color:#5e5a7a;margin-bottom:2px;flex-shrink:0;text-align:center}
+
+/* ── Board wrapper ────────────────────────────────────── */
+#bwrap{position:relative;flex-shrink:0;touch-action:none;overscroll-behavior:none}
+.bs{position:absolute;border-radius:5px;touch-action:none}
+.bs.t{top:0;left:0;right:0}.bs.b{bottom:0;left:0;right:0}
+.bs.l{left:0;top:0;bottom:0}.bs.r{right:0;top:0;bottom:0}
+@keyframes bsPop{0%{filter:brightness(1) saturate(1)}
+                 30%{filter:brightness(2.8) saturate(1.8)}
+                 100%{filter:brightness(1) saturate(1)}}
+.bs.pop{animation:bsPop .38s ease-out forwards}
+
+#gc{display:block;position:absolute;border-radius:3px;touch-action:none;
+    image-rendering:pixelated;image-rendering:crisp-edges;
+    will-change:transform} /* GPU layer hint */
+
+/* ── Legend ───────────────────────────────────────────── */
+#legend{display:flex;gap:clamp(6px,2vw,14px);flex-shrink:0;padding:3px 0 2px}
+.leg{display:flex;align-items:center;gap:4px;
+     font-size:clamp(8px,2vw,10px);color:#5e5a7a;font-weight:700}
+.leg-dot{width:9px;height:9px;border-radius:2px;flex-shrink:0}
+
+/* ── D-pad (compact backup controls) ─────────────────── */
+#dpad-area{flex:1;display:flex;align-items:center;justify-content:center;
+           flex-shrink:0;padding-bottom:4px;min-height:0}
+.dpad{display:grid;grid-template:repeat(3,1fr)/repeat(3,1fr);gap:4px;
+      width:clamp(110px,30vw,140px);height:clamp(110px,30vw,140px)}
+.dp{display:flex;align-items:center;justify-content:center;
+    background:#13131e;border:1px solid #28283c;border-radius:10px;
+    font-size:clamp(14px,4vw,20px);color:#5e5a7a;cursor:pointer;
+    transition:background .07s,color .07s,transform .06s,border-color .07s;
+    touch-action:manipulation}
+.dp:active,.dp.lit{background:#1c1c2b;color:#ece8ff;transform:scale(.87);border-color:#9d7ff5}
+.dp.mid{background:transparent;border-color:transparent;cursor:default;
+        font-size:9px;color:#28283c;pointer-events:none}
+
+/* ── Nav row ──────────────────────────────────────────── */
+#nav-row{width:100%;display:flex;gap:6px;justify-content:center;
+         padding-bottom:6px;flex-shrink:0}
+
+/* ── Overlays ─────────────────────────────────────────── */
+.ov{display:none;position:fixed;inset:0;z-index:300;
+    background:#0a0a10ee;backdrop-filter:blur(10px);
+    align-items:center;justify-content:center;
+    flex-direction:column;gap:13px;padding:24px}
+.ov.on{display:flex}
+.ov-title{font-family:'Silkscreen',monospace;font-size:clamp(20px,6.5vw,34px);
+          color:#9d7ff5;text-align:center;text-shadow:0 0 40px #9d7ff555;
+          animation:ovGlow 1.3s ease-in-out infinite}
+@keyframes ovGlow{0%,100%{opacity:1}50%{opacity:.55}}
+.ov-sub{font-family:'Silkscreen',monospace;font-size:clamp(9px,2.5vw,12px);
+        letter-spacing:2px;color:#5e5a7a;text-align:center}
+.ov-stat{font-family:'Silkscreen',monospace;font-size:clamp(11px,3vw,15px);
+         color:#ece8ff;letter-spacing:1px}
+.ov-btns{display:flex;gap:9px;margin-top:6px;flex-wrap:wrap;justify-content:center}
+
+/* ── Toast ────────────────────────────────────────────── */
+#toast{position:fixed;top:60px;left:50%;
+       transform:translateX(-50%) translateY(-8px);
+       background:#1c1c2b;border:1px solid #28283c;border-radius:18px;
+       padding:7px 16px;font-size:11px;color:#5e5a7a;
+       opacity:0;transition:opacity .22s,transform .22s;
+       pointer-events:none;white-space:nowrap;z-index:100}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ── Swipe hint arrow ─────────────────────────────────── */
+#sarrow{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+        pointer-events:none;font-size:56px;color:rgba(255,255,255,.12);
+        opacity:0;transition:opacity .1s;z-index:5}
+#sarrow.on{opacity:1}
+
+/* ── Level progress dots ──────────────────────────────── */
+#lv-dots{display:flex;gap:4px;align-items:center;justify-content:flex-end}
+.lv-dot{width:7px;height:7px;border-radius:50%;border:1px solid #28283c;
+        background:#13131e;transition:background .2s,border-color .2s;cursor:pointer;
+        touch-action:manipulation}
+.lv-dot.done{background:#9d7ff5;border-color:#9d7ff5}
+.lv-dot.current{background:#3ef09a;border-color:#3ef09a;box-shadow:0 0 6px #3ef09a88}
+.lv-dot.locked{opacity:.35;cursor:default}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="topbar">
+    <div class="title">PIXELDROP</div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+      <div class="lv-pill" id="lv-pill">LV 1 / 8</div>
+      <div id="lv-dots"></div>
+    </div>
+  </div>
+  <div id="meta-row">
+    <div class="stat">
+      <div class="stat-lbl">MOVES</div>
+      <div class="stat-val a" id="s-moves">0</div>
+    </div>
+    <div class="act-row">
+      <button class="abtn u" id="btn-undo" disabled>↩ UNDO</button>
+      <button class="abtn r" id="btn-restart">↺ RESTART</button>
+    </div>
+    <div class="stat" style="align-items:flex-end">
+      <div class="stat-lbl">TILES</div>
+      <div class="stat-val g" id="s-tiles">0</div>
+    </div>
+  </div>
+  <div id="lv-name">SMILEY</div>
+  <div id="bwrap">
+    <div class="bs t" id="bs-t"></div>
+    <div class="bs b" id="bs-b"></div>
+    <div class="bs l" id="bs-l"></div>
+    <div class="bs r" id="bs-r"></div>
+    <canvas id="gc"></canvas>
+    <div id="sarrow"></div>
+  </div>
+  <div id="legend"></div>
+  <div id="dpad-area">
+    <div class="dpad">
+      <div></div><div class="dp" id="dp-up">↑</div><div></div>
+      <div class="dp" id="dp-left">←</div>
+      <div class="dp mid">✦</div>
+      <div class="dp" id="dp-right">→</div>
+      <div></div><div class="dp" id="dp-down">↓</div><div></div>
+    </div>
+  </div>
+  <div id="nav-row">
+    <button class="abtn" id="btn-prev" style="visibility:hidden">← PREV</button>
+    <button class="abtn u" id="btn-next">NEXT →</button>
+  </div>
+</div>
+
+<div class="ov" id="win-ov">
+  <div class="ov-title">✦ CLEAR! ✦</div>
+  <div class="ov-sub" id="ov-name">SMILEY DONE</div>
+  <div class="ov-stat" id="ov-moves">0 MOVES</div>
+  <div class="ov-btns">
+    <button class="abtn u" id="ov-next">NEXT LEVEL →</button>
+    <button class="abtn" id="ov-replay">REPLAY</button>
+  </div>
+</div>
+<div class="ov" id="done-ov">
+  <div class="ov-title" style="font-size:clamp(16px,5vw,24px)">ALL CLEARED!</div>
+  <div class="ov-sub">EVERY PUZZLE SOLVED</div>
+  <div class="ov-btns">
+    <button class="abtn u" id="done-restart">PLAY AGAIN</button>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+'use strict';
+/* ════════════════════════════════════════════════════════
+   PALETTE
+════════════════════════════════════════════════════════ */
+const P = {
+  R:'#ff4d6d', Y:'#ffd166', B:'#38bdf8', G:'#4ade80',
+  K:'#f472b6', O:'#fb923c', V:'#c084fc', T:'#2dd4bf',
+  L:'#a3e635', W:'#f0eaff', _:null
+};
+
+/* ════════════════════════════════════════════════════════
+   LEVELS — 8 animal/character pixel-art puzzles, 20×20
+   Difficulty: easy (isolated zones) → hard (interleaved)
+   Always 4 border colors, every tile maps to one border.
+════════════════════════════════════════════════════════ */
+const LEVELS = (() => {
+const {R,Y,B,G,K,O,V,T,L,_} = P;
+return [
+
+/* 1 ── FROG  70%  B/Y/R/G  ── easiest: sky+body+eyes isolated */
+{ name:'FROG', size:20,
+  bc:{top:B, bottom:Y, left:R, right:G},
+  grid:[
+    [B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B],
+    [B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B],
+    [B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B],
+    [B,B,B,B,G,G,G,B,B,B,B,B,B,G,G,G,B,B,B,B],
+    [B,B,B,G,G,G,G,G,B,B,B,B,G,G,G,G,G,B,B,B],
+    [B,B,G,G,R,R,G,G,G,B,B,G,G,G,R,R,G,G,B,B],
+    [B,B,G,G,R,R,G,G,G,B,B,G,G,G,R,R,G,G,B,B],
+    [B,B,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,B,B],
+    [B,B,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,B,B],
+    [B,B,G,G,G,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,G,G,G,B,B],
+    [B,B,G,G,G,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,G,G,G,B,B],
+    [B,B,G,G,G,G,Y,Y,Y,Y,Y,Y,Y,Y,G,G,G,G,B,B],
+    [B,B,B,G,G,G,G,G,G,G,G,G,G,G,G,G,G,B,B,B],
+    [B,B,B,B,G,G,G,G,G,G,G,G,G,G,G,G,B,B,B,B],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  ]},
+
+/* 2 ── CRAB  41%  K/O/R/Y  ── easy: body+claws isolated */
+{ name:'CRAB', size:20,
+  bc:{top:K, bottom:O, left:R, right:Y},
+  grid:[
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+    [_,_,K,K,_,_,_,_,_,_,_,_,_,_,_,_,K,K,_,_],
+    [_,_,K,K,_,_,_,_,_,_,_,_,_,_,_,_,K,K,_,_],
+    [R,R,_,_,O,O,O,O,O,O,O,O,O,O,O,O,_,_,Y,Y],
+    [R,R,R,_,O,O,O,O,O,O,O,O,O,O,O,O,_,Y,Y,Y],
+    [R,R,R,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,Y,Y],
+    [R,R,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,Y,Y],
+    [R,R,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,Y,Y],
+    [R,R,R,O,O,O,O,O,O,O,O,O,O,O,O,O,O,Y,Y,Y],
+    [_,R,R,R,O,O,O,O,O,O,O,O,O,O,O,O,Y,Y,Y,_],
+    [_,_,R,R,_,O,O,O,O,O,O,O,O,O,O,_,Y,Y,_,_],
+    [_,_,_,R,_,_,O,O,_,O,O,_,O,O,_,_,Y,_,_,_],
+    [_,_,_,R,_,_,_,_,_,_,_,_,_,_,_,_,Y,_,_,_],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  ]},
+
+/* 3 ── OWL  64%  T/V/Y/O  ── easy-med: wings mostly isolated */
+{ name:'OWL', size:20,
+  bc:{top:T, bottom:V, left:Y, right:O},
+  grid:[
+    [_,_,_,_,_,_,_,T,T,T,T,T,T,_,_,_,_,_,_,_],
+    [_,_,_,_,_,_,T,T,T,T,T,T,T,T,_,_,_,_,_,_],
+    [_,_,_,_,_,T,T,T,T,T,T,T,T,T,T,_,_,_,_,_],
+    [_,_,_,_,T,T,Y,Y,Y,T,T,O,O,O,T,T,_,_,_,_],
+    [_,_,_,T,T,T,Y,Y,Y,T,T,O,O,O,T,T,T,_,_,_],
+    [_,_,_,T,T,T,Y,Y,Y,T,T,O,O,O,T,T,T,_,_,_],
+    [_,_,_,T,T,T,T,T,T,T,T,T,T,T,T,T,T,_,_,_],
+    [_,_,T,T,T,T,T,V,V,T,T,V,V,T,T,T,T,T,_,_],
+    [_,T,T,T,T,T,T,V,V,T,T,V,V,T,T,T,T,T,T,_],
+    [_,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,_],
+    [T,T,T,T,T,T,T,V,V,V,V,V,V,T,T,T,T,T,T,T],
+    [T,T,T,T,T,T,V,V,V,V,V,V,V,V,T,T,T,T,T,T],
+    [T,T,T,T,T,V,V,V,V,V,V,V,V,V,V,T,T,T,T,T],
+    [_,T,T,T,T,V,V,V,V,V,V,V,V,V,V,T,T,T,T,_],
+    [_,T,T,T,T,V,V,V,V,V,V,V,V,V,V,T,T,T,T,_],
+    [_,_,T,T,T,V,V,V,V,V,V,V,V,V,V,T,T,T,_,_],
+    [_,_,_,_,_,V,V,V,_,_,_,_,V,V,V,_,_,_,_,_],
+    [_,_,_,_,_,V,V,V,_,_,_,_,V,V,V,_,_,_,_,_],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  ]},
+
+/* 4 ── PENGUIN  56%  B/Y/V/G  ── medium */
+{ name:'PENGUIN', size:20,
+  bc:{top:B, bottom:Y, left:V, right:G},
+  grid:[
+    [_,_,_,_,_,_,_,B,B,B,B,B,B,_,_,_,_,_,_,_],
+    [_,_,_,_,_,_,B,B,B,B,B,B,B,B,_,_,_,_,_,_],
+    [_,_,_,_,_,B,B,B,B,B,B,B,B,B,B,_,_,_,_,_],
+    [_,_,_,_,B,B,B,Y,B,B,B,B,Y,B,B,B,_,_,_,_],
+    [_,_,_,_,B,B,B,Y,B,B,B,B,Y,B,B,B,_,_,_,_],
+    [_,_,_,_,B,B,B,B,B,Y,Y,B,B,B,B,B,_,_,_,_],
+    [_,_,_,_,B,B,B,B,Y,Y,Y,Y,B,B,B,B,_,_,_,_],
+    [_,_,_,V,V,B,B,B,Y,Y,Y,Y,B,B,B,G,G,_,_,_],
+    [_,_,V,V,V,B,B,Y,Y,Y,Y,Y,Y,B,B,G,G,G,_,_],
+    [_,V,V,V,V,B,B,Y,Y,Y,Y,Y,Y,B,B,G,G,G,G,_],
+    [_,V,V,V,V,B,B,Y,Y,Y,Y,Y,Y,B,B,G,G,G,G,_],
+    [_,V,V,V,V,B,B,Y,Y,Y,Y,Y,Y,B,B,G,G,G,G,_],
+    [_,_,V,V,V,B,B,Y,Y,Y,Y,Y,Y,B,B,G,G,G,_,_],
+    [_,_,_,V,V,B,B,B,Y,Y,Y,Y,B,B,B,G,G,_,_,_],
+    [_,_,_,_,B,B,B,B,B,B,B,B,B,B,B,B,_,_,_,_],
+    [_,_,_,_,B,B,B,B,B,B,B,B,B,B,B,B,_,_,_,_],
+    [_,_,_,_,_,B,Y,Y,B,B,B,B,Y,Y,B,_,_,_,_,_],
+    [_,_,_,_,_,Y,Y,Y,_,_,_,_,Y,Y,Y,_,_,_,_,_],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  ]},
+
+/* 5 ── FOX  70%  O/R/Y/G  ── medium: muzzle patches interleaved */
+{ name:'FOX', size:20,
+  bc:{top:O, bottom:R, left:Y, right:G},
+  grid:[
+    [_,_,O,O,O,_,_,_,_,_,_,_,_,_,_,O,O,O,_,_],
+    [_,O,O,O,O,O,_,_,_,_,_,_,_,_,O,O,O,O,O,_],
+    [O,O,Y,Y,O,O,O,_,_,_,_,_,_,O,O,O,G,G,O,O],
+    [O,O,Y,Y,O,O,O,O,_,_,_,_,O,O,O,O,G,G,O,O],
+    [O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O],
+    [O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O],
+    [O,O,O,O,R,R,O,O,O,O,O,O,O,O,R,R,O,O,O,O],
+    [O,O,O,R,R,R,R,O,O,O,O,O,O,R,R,R,R,O,O,O],
+    [O,O,R,R,R,R,R,R,O,O,O,O,R,R,R,R,R,R,O,O],
+    [O,R,R,R,R,R,R,R,R,O,O,R,R,R,R,R,R,R,R,O],
+    [O,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,O],
+    [O,O,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,O,O],
+    [O,O,O,R,R,O,R,R,R,R,R,R,R,R,O,R,R,O,O,O],
+    [O,O,O,O,O,O,O,R,R,R,R,R,R,O,O,O,O,O,O,O],
+    [_,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,_],
+    [_,_,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,_,_],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  ]},
+
+/* 6 ── ROBOT  58%  T/V/O/G  ── medium-hard: arms require sequencing */
+{ name:'ROBOT', size:20,
+  bc:{top:T, bottom:V, left:O, right:G},
+  grid:[
+    [_,_,_,_,_,_,_,_,_,T,T,_,_,_,_,_,_,_,_,_],
+    [_,_,_,_,_,_,_,_,_,T,T,_,_,_,_,_,_,_,_,_],
+    [_,_,_,_,_,_,_,_,T,T,T,T,_,_,_,_,_,_,_,_],
+    [_,_,_,_,T,T,T,T,T,T,T,T,T,T,T,T,_,_,_,_],
+    [_,_,_,_,T,T,T,T,T,T,T,T,T,T,T,T,_,_,_,_],
+    [_,_,_,_,T,T,G,G,T,T,T,T,O,O,T,T,_,_,_,_],
+    [_,_,_,_,T,T,G,G,T,T,T,T,O,O,T,T,_,_,_,_],
+    [_,_,_,_,T,T,T,T,T,V,V,T,T,T,T,T,_,_,_,_],
+    [_,_,_,_,T,T,T,T,V,V,V,V,T,T,T,T,_,_,_,_],
+    [_,_,O,O,T,T,T,T,T,T,T,T,T,T,T,T,G,G,_,_],
+    [_,O,O,O,V,V,V,V,V,V,V,V,V,V,V,V,G,G,G,_],
+    [O,O,O,O,V,V,V,V,V,V,V,V,V,V,V,V,G,G,G,G],
+    [O,O,O,O,V,V,V,V,V,V,V,V,V,V,V,V,G,G,G,G],
+    [O,O,O,O,V,V,V,V,V,V,V,V,V,V,V,V,G,G,G,G],
+    [_,O,O,O,V,V,V,V,V,V,V,V,V,V,V,V,G,G,G,_],
+    [_,_,O,O,V,V,V,V,V,V,V,V,V,V,V,V,G,G,_,_],
+    [_,_,_,_,V,V,V,_,_,V,V,_,_,V,V,V,_,_,_,_],
+    [_,_,_,_,V,V,V,_,_,V,V,_,_,V,V,V,_,_,_,_],
+    [_,_,_,_,V,V,V,_,_,V,V,_,_,V,V,V,_,_,_,_],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  ]},
+
+/* 7 ── DRAGON  56%  R/G/Y/O  ── hard: wings interleaved with body */
+{ name:'DRAGON', size:20,
+  bc:{top:R, bottom:G, left:Y, right:O},
+  grid:[
+    [_,_,_,R,R,R,R,_,_,_,_,_,_,_,_,_,_,_,_,_],
+    [_,_,R,R,R,R,R,R,_,_,_,_,_,_,_,_,_,_,_,_],
+    [_,R,R,R,R,R,R,R,R,_,_,_,_,_,_,_,_,_,_,_],
+    [R,R,R,R,O,O,R,R,R,R,_,_,_,_,_,_,_,_,_,_],
+    [R,R,R,O,O,O,O,R,R,R,R,_,_,_,_,_,_,_,_,_],
+    [R,R,R,R,O,O,R,R,R,R,R,R,_,_,_,_,_,_,_,_],
+    [Y,Y,R,R,R,R,R,R,R,R,R,R,R,_,_,_,_,_,_,_],
+    [Y,Y,Y,Y,R,R,R,R,R,R,G,G,R,R,_,_,_,_,_,_],
+    [Y,Y,Y,Y,Y,R,R,R,G,G,G,G,G,R,R,_,_,O,O,_],
+    [Y,Y,Y,Y,Y,Y,R,G,G,G,G,G,G,G,R,_,O,O,O,O],
+    [Y,Y,Y,Y,Y,Y,G,G,G,G,G,G,G,G,G,O,O,O,O,O],
+    [Y,Y,Y,Y,Y,G,G,G,G,G,G,G,G,G,O,O,O,O,O,O],
+    [_,Y,Y,Y,G,G,G,G,G,G,G,G,G,O,O,O,O,O,O,_],
+    [_,_,Y,G,G,G,G,G,G,G,G,G,O,O,O,O,O,O,_,_],
+    [_,_,_,G,G,G,G,G,G,G,G,O,O,O,O,O,_,_,_,_],
+    [_,_,_,_,G,G,G,G,G,G,O,O,O,O,_,_,_,_,_,_],
+    [_,_,_,_,_,G,G,G,G,G,G,_,_,_,_,_,_,_,_,_],
+    [_,_,_,_,_,_,G,G,G,G,_,_,_,_,_,_,_,_,_,_],
+    [_,_,_,_,_,_,_,G,G,_,_,_,_,_,_,_,_,_,_,_],
+    [_,_,_,_,_,_,_,_,G,_,_,_,_,_,_,_,_,_,_,_],
+  ]},
+
+/* 8 ── ALIEN  79%  T/V/K/L  ── hardest: tentacles interleaved with body */
+{ name:'ALIEN', size:20,
+  bc:{top:T, bottom:V, left:K, right:L},
+  grid:[
+    [_,_,_,_,_,_,T,T,T,T,T,T,T,T,_,_,_,_,_,_],
+    [_,_,_,_,T,T,T,T,T,T,T,T,T,T,T,T,_,_,_,_],
+    [_,_,_,T,T,T,T,T,T,T,T,T,T,T,T,T,T,_,_,_],
+    [_,_,T,T,T,K,K,K,T,T,T,T,L,L,L,T,T,T,_,_],
+    [_,T,T,T,T,K,K,K,T,T,T,T,L,L,L,T,T,T,T,_],
+    [_,T,T,T,T,K,K,K,T,T,T,T,L,L,L,T,T,T,T,_],
+    [_,T,T,T,T,T,T,T,T,V,V,T,T,T,T,T,T,T,T,_],
+    [T,T,T,T,T,T,T,T,V,V,V,V,T,T,T,T,T,T,T,T],
+    [T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T],
+    [K,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,L],
+    [K,K,V,V,V,V,V,V,V,V,V,V,V,V,V,V,V,V,L,L],
+    [K,K,V,V,V,V,V,V,V,V,V,V,V,V,V,V,V,V,L,L],
+    [K,K,K,V,V,V,V,V,V,V,V,V,V,V,V,V,V,L,L,L],
+    [K,K,K,V,V,V,V,V,V,V,V,V,V,V,V,V,V,L,L,L],
+    [K,K,K,K,V,V,V,V,V,V,V,V,V,V,V,V,L,L,L,L],
+    [K,K,_,K,K,V,V,V,V,V,V,V,V,V,V,L,L,K,L,L],
+    [K,_,_,_,K,K,V,V,V,V,V,V,V,V,L,L,_,_,_,L],
+    [_,_,_,_,K,_,K,V,V,V,V,V,V,L,_,L,_,_,_,_],
+    [_,_,_,_,_,_,_,K,K,V,V,L,L,_,_,_,_,_,_,_],
+    [_,_,_,_,_,_,_,_,_,V,V,_,_,_,_,_,_,_,_,_],
+  ]},
+
+]})();
+
+/* ════════════════════════════════════════════════════════
+   STATE
+════════════════════════════════════════════════════════ */
+let lvIdx=0, grid=[], moveCount=0, busy=false, undoStack=[];
+let RING=10, TPXL=32;
+
+// Progression: persist the highest level the player has unlocked.
+// Level 0 is always unlocked; completing level N unlocks N+1.
+let unlockedUpTo = 0;
+try { unlockedUpTo = Math.min(parseInt(localStorage.getItem('pd_unlocked')||'0', 10), LEVELS.length-1); } catch(e){}
+function saveProgress(idx) {
+  if(idx > unlockedUpTo){ unlockedUpTo = idx; try{ localStorage.setItem('pd_unlocked', String(idx)); }catch(e){} }
+}
+function isUnlocked(idx) { return idx <= unlockedUpTo; }
+
+const canvas = document.getElementById('gc');
+const ctx    = canvas.getContext('2d', {alpha:false}); // opaque — faster compositing
+
+/* ════════════════════════════════════════════════════════
+   GRID UTILS
+════════════════════════════════════════════════════════ */
+const cloneGrid  = g => g.map(r=>[...r]);
+const countTiles = (g=grid) => g.reduce((s,r)=>s+r.filter(Boolean).length, 0);
+
+/* ════════════════════════════════════════════════════════
+   LAYOUT
+════════════════════════════════════════════════════════ */
+function applyLayout() {
+  const N    = LEVELS[lvIdx].size;
+  const appW = Math.min(window.innerWidth, 430);
+  const appH = window.innerHeight;
+
+  RING = Math.max(7, Math.round(appW * 0.025));
+
+  // Reserve chrome: topbar+meta+lvname+legend+dpad+nav+gaps ≈ 330px
+  const CHROME = 334;
+  const byH = appH - CHROME - RING * 2;
+  const byW = appW - 20   - RING * 2;
+  const canW = Math.floor(Math.min(byW, Math.max(byH, appW * 0.52)));
+
+  TPXL = Math.floor(canW / N);
+  const cw = TPXL * N, tw = cw + RING * 2;
+
+  canvas.width  = cw;
+  canvas.height = cw;
+  canvas.style.cssText = `left:${RING}px;top:${RING}px;width:${cw}px;height:${cw}px`;
+
+  const bw = document.getElementById('bwrap');
+  bw.style.width  = tw + 'px';
+  bw.style.height = tw + 'px';
+
+  const R = RING;
+  document.getElementById('bs-t').style.cssText = `height:${R}px`;
+  document.getElementById('bs-b').style.cssText = `height:${R}px`;
+  document.getElementById('bs-l').style.cssText = `width:${R}px`;
+  document.getElementById('bs-r').style.cssText = `width:${R}px`;
+
+  applyBorderColors();
+}
+
+function applyBorderColors() {
+  const bc = LEVELS[lvIdx].bc;
+  const ids = {top:'bs-t',bottom:'bs-b',left:'bs-l',right:'bs-r'};
+  for (const [side,id] of Object.entries(ids)) {
+    const el = document.getElementById(id);
+    el.style.background = bc[side];
+    el.style.boxShadow  = `0 0 10px 3px ${bc[side]}55`;
+  }
+}
+
+/* ════════════════════════════════════════════════════════
+   INIT
+════════════════════════════════════════════════════════ */
+function initLevel(idx) {
+  // Enforce lock: can never navigate to a level that hasn't been unlocked yet
+  if(!isUnlocked(idx)) { showLockedToast(idx); return; }
+  lvIdx=idx;
+  const lv=LEVELS[idx];
+  grid=cloneGrid(lv.grid);
+  moveCount=0; busy=false; undoStack=[];
+
+  applyLayout(); buildLegend(); buildDots(); syncUI(); render(grid); closeOverlays();
+
+  document.getElementById('lv-pill').textContent  = `LV ${idx+1} / ${LEVELS.length}`;
+  document.getElementById('lv-name').textContent  = lv.name;
+  // PREV: always show if not first level (even locked levels show as locked)
+  document.getElementById('btn-prev').style.visibility = idx>0 ? 'visible':'hidden';
+  // NEXT: show if next level exists, label changes if it's locked
+  const nextBtn = document.getElementById('btn-next');
+  if(idx < LEVELS.length-1){
+    nextBtn.style.visibility = 'visible';
+    nextBtn.textContent = isUnlocked(idx+1) ? 'NEXT →' : '🔒 LOCKED';
+    nextBtn.disabled = !isUnlocked(idx+1);
+  } else {
+    nextBtn.style.visibility = 'hidden';
+  }
+}
+
+function showLockedToast(idx){
+  toast(`Complete level ${idx} first to unlock this one`);
+}
+function closeOverlays() {
+  document.getElementById('win-ov').classList.remove('on');
+  document.getElementById('done-ov').classList.remove('on');
+}
+
+function buildLegend() {
+  const bc=LEVELS[lvIdx].bc;
+  const sym={top:'↑',bottom:'↓',left:'←',right:'→'};
+  document.getElementById('legend').innerHTML =
+    Object.entries(bc).map(([d,c])=>
+      `<div class="leg"><div class="leg-dot" style="background:${c}"></div><span>${sym[d]}</span></div>`
+    ).join('');
+}
+
+function buildDots() {
+  const container = document.getElementById('lv-dots');
+  container.innerHTML = LEVELS.map((lv, i) => {
+    let cls = 'lv-dot';
+    if(i === lvIdx)         cls += ' current';
+    else if(isUnlocked(i))  cls += ' done';
+    else                    cls += ' locked';
+    return `<div class="${cls}" title="${lv.name}" data-idx="${i}"></div>`;
+  }).join('');
+  // Tap a dot to jump to that level (if unlocked)
+  container.querySelectorAll('.lv-dot').forEach(dot => {
+    dot.addEventListener('click', () => {
+      const i = parseInt(dot.dataset.idx, 10);
+      if(isUnlocked(i)) initLevel(i);
+      else showLockedToast(i+1);
+    });
+  });
+}
+
+/* ════════════════════════════════════════════════════════
+   RENDER  (static — draws a grid to canvas pixel-perfectly)
+════════════════════════════════════════════════════════ */
+function render(g) {
+  const N=LEVELS[lvIdx].size, px=TPXL, W=canvas.width, H=canvas.height;
+  ctx.fillStyle='#11111b'; ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='rgba(255,255,255,0.04)'; ctx.lineWidth=0.5;
+  for(let i=0;i<=N;i++){
+    ctx.beginPath();ctx.moveTo(i*px,0);ctx.lineTo(i*px,H);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(0,i*px);ctx.lineTo(W,i*px);ctx.stroke();
+  }
+  for(let r=0;r<N;r++)
+    for(let c=0;c<N;c++)
+      if(g[r][c]) drawTile(c*px, r*px, px, g[r][c], 1);
+}
+
+/* drawTile — pixel-snapped, scales cleanly from 8px to 40px tiles */
+function drawTile(x, y, px, color, alpha) {
+  x=Math.round(x); y=Math.round(y);
+  const pad = Math.max(1, Math.round(px * 0.06));
+  const rad = Math.max(1, Math.round(px * 0.12));
+  const tx=x+pad, ty=y+pad, tw=px-pad*2, th=px-pad*2;
+  if(tw<=0||th<=0) return;
+
+  ctx.globalAlpha=alpha;
+
+  // Base fill
+  ctx.fillStyle=color;
+  rrect(tx,ty,tw,th,rad); ctx.fill();
+
+  // Gloss + shadow only when tiles are large enough to see them
+  if(px >= 10){
+    const grd=ctx.createLinearGradient(tx,ty,tx,ty+th*0.5);
+    grd.addColorStop(0,'rgba(255,255,255,0.26)');
+    grd.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle=grd;
+    rrect(tx,ty,tw,th*0.5,rad); ctx.fill();
+
+    ctx.fillStyle='rgba(0,0,0,0.18)';
+    rrect(tx,ty+th*0.62,tw,th*0.38,rad); ctx.fill();
+  }
+
+  ctx.globalAlpha=1;
+}
+
+function rrect(x,y,w,h,r){
+  r=Math.min(r,w/2,h/2);
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath();
+}
+
+/* ════════════════════════════════════════════════════════
+   PURE GAME LOGIC
+   resolveChain — tracks every tile by object identity so
+   coordinates are always correct across pack/elim passes.
+════════════════════════════════════════════════════════ */
+function resolveChain(src, dir) {
+  const {size:N, bc} = LEVELS[lvIdx];
+
+  // Assign each tile a stable id and remember its original position
+  let nextId=0;
+  const tiles=[];
+  for(let r=0;r<N;r++)
+    for(let c=0;c<N;c++)
+      if(src[r][c]) tiles.push({id:nextId++, color:src[r][c], r, c, preR:r, preC:c});
+
+  // Pack: reposition tiles toward the wall, no gaps
+  function pack(){
+    if(dir==='down'||dir==='up'){
+      for(let c=0;c<N;c++){
+        const col=tiles.filter(t=>t.c===c).sort((a,b)=>a.r-b.r);
+        if(dir==='down') col.forEach((t,i)=>{ t.r=N-col.length+i; });
+        else             col.forEach((t,i)=>{ t.r=i; });
+      }
+    } else {
+      for(let r=0;r<N;r++){
+        const row=tiles.filter(t=>t.r===r).sort((a,b)=>a.c-b.c);
+        if(dir==='right') row.forEach((t,i)=>{ t.c=N-row.length+i; });
+        else              row.forEach((t,i)=>{ t.c=i; });
+      }
+    }
+  }
+
+  // Elim: remove all border-touching tiles matching the border color
+  // Returns count removed
+  function elim(){
+    const borderColor={down:bc.bottom,up:bc.top,left:bc.left,right:bc.right}[dir];
+    const edgePos    ={down:N-1,      up:0,     left:0,      right:N-1}[dir];
+    const atEdge = (dir==='down'||dir==='up') ? t=>t.r===edgePos : t=>t.c===edgePos;
+    let removed=0;
+    for(let i=tiles.length-1;i>=0;i--){
+      if(atEdge(tiles[i]) && tiles[i].color===borderColor){
+        tiles.splice(i,1); removed++;
+      }
+    }
+    return removed;
+  }
+
+  // Run full chain: pack → elim → pack → elim … until stable
+  pack();
+  let totalRemoved=0;
+  while(true){
+    const n=elim();
+    if(n===0) break;
+    totalRemoved+=n;
+    pack();
+  }
+
+  // Build finalGrid
+  const finalGrid=Array.from({length:N},()=>Array(N).fill(null));
+  tiles.forEach(t=>{ finalGrid[t.r][t.c]=t.color; });
+
+  // Survivor motion list (pre-swipe pos → final pos)
+  const survivorMotion=tiles.map(t=>({color:t.color,fr:t.preR,fc:t.preC,tr:t.r,tc:t.c}));
+
+  // Dead list (tiles in src that didn't survive)
+  const aliveIds=new Set(tiles.map(t=>t.id));
+  const deadList=[];
+  let id2=0;
+  for(let r=0;r<N;r++)
+    for(let c=0;c<N;c++)
+      if(src[r][c]){ if(!aliveIds.has(id2)) deadList.push({preR:r,preC:c,color:src[r][c]}); id2++; }
+
+  return {finalGrid, survivorMotion, deadList, totalRemoved};
+}
+
+/* ════════════════════════════════════════════════════════
+   ANIMATION ENGINE
+   Single rAF loop, two overlapping phases:
+
+   SLIDE  t ∈ [0, SLIDE_END]   — survivors glide to final pos
+   FADE   t ∈ [FADE_START, 1]  — dead tiles shrink+fade out
+
+   Overlap window FADE_START…SLIDE_END makes the whole move
+   feel like one continuous gesture.
+
+   Positions are Math.round()ed every frame → no sub-pixel
+   gaps or misalignments ever appear.
+════════════════════════════════════════════════════════ */
+const TOTAL_MS   = 220;   // total move duration ms
+const SLIDE_END  = 0.78;  // slide finishes at 78% of total
+const FADE_START = 0.28;  // fade starts at 28% of total
+
+// Cubic ease-out for slides (smooth deceleration)
+const easeOut3 = t => 1-(1-t)*(1-t)*(1-t);
+// Quad ease-in for fades (accelerating disappearance)
+const easeIn2  = t => t*t;
+const clamp    = (t,a,b) => t<a?a:t>b?b:t;
+
+function animMove(preGrid, finalGrid, survivorMotion, deadList, cb) {
+  const N=LEVELS[lvIdx].size, px=TPXL;
+
+  // Skip animation if nothing actually changed
+  const anyChange = survivorMotion.some(s=>s.fr!==s.tr||s.fc!==s.tc) || deadList.length>0;
+  if(!anyChange){ render(finalGrid); cb(); return; }
+
+  const t0=performance.now();
+
+  function frame(now){
+    const tRaw=clamp((now-t0)/TOTAL_MS, 0, 1);
+
+    // ── slide progress ──
+    const tSlide = clamp(tRaw/SLIDE_END, 0, 1);
+    const eSlide = easeOut3(tSlide);
+
+    // ── fade progress ──
+    const tFade = clamp((tRaw-FADE_START)/(1-FADE_START), 0, 1);
+    const eFade = easeIn2(tFade);
+
+    // ── draw ──
+    ctx.fillStyle='#11111b'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.strokeStyle='rgba(255,255,255,0.04)'; ctx.lineWidth=0.5;
+    for(let i=0;i<=N;i++){
+      ctx.beginPath();ctx.moveTo(i*px,0);ctx.lineTo(i*px,canvas.height);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(0,i*px);ctx.lineTo(canvas.width,i*px);ctx.stroke();
+    }
+
+    // Survivors: slide from pre-pos to final pos
+    for(const s of survivorMotion){
+      // Math.round ensures pixel-perfect snapping — eliminates sub-pixel gaps
+      const x = Math.round((s.fc+(s.tc-s.fc)*eSlide)*px);
+      const y = Math.round((s.fr+(s.tr-s.fr)*eSlide)*px);
+      drawTile(x, y, px, s.color, 1);
+    }
+
+    // Dead tiles: shrink + fade in-place, all simultaneously
+    if(deadList.length && eFade<1){
+      const sc=1-eFade, al=1-eFade;
+      for(const d of deadList){
+        ctx.save();
+        ctx.translate(Math.round((d.preC+0.5)*px), Math.round((d.preR+0.5)*px));
+        ctx.scale(sc,sc);
+        drawTile(-Math.round(px/2),-Math.round(px/2),px,d.color,al);
+        ctx.restore();
+      }
+    }
+
+    if(tRaw<1) requestAnimationFrame(frame);
+    else cb();
+  }
+
+  requestAnimationFrame(frame);
+}
+
+/* ════════════════════════════════════════════════════════
+   CORE MOVE HANDLER
+════════════════════════════════════════════════════════ */
+function doMove(dir) {
+  if(busy) return;
+  if(countTiles()===0) return;
+
+  busy=true;
+
+  // Snapshot for undo before any mutation
+  undoStack.push({grid:cloneGrid(grid), moves:moveCount});
+  if(undoStack.length>60) undoStack.shift();
+
+  // Resolve full chain in pure logic first
+  const preGrid=cloneGrid(grid);
+  const {finalGrid, survivorMotion, deadList, totalRemoved}=resolveChain(grid, dir);
+
+  // Commit immediately — undo/UI always correct
+  grid=finalGrid; moveCount++; syncUI();
+
+  flashBorder(dir); litDpad(dir); showArrow(dir);
+
+  animMove(preGrid, finalGrid, survivorMotion, deadList, ()=>{
+    render(grid); busy=false;
+    if(totalRemoved===0) toast('No match — try another direction');
+    if(countTiles()===0) setTimeout(showWin, 260);
+  });
+}
+
+/* ════════════════════════════════════════════════════════
+   UNDO
+════════════════════════════════════════════════════════ */
+function doUndo(){
+  if(busy||undoStack.length===0) return;
+  const snap=undoStack.pop();
+  grid=snap.grid; moveCount=snap.moves;
+  syncUI(); render(grid); closeOverlays();
+}
+
+/* ════════════════════════════════════════════════════════
+   UI
+════════════════════════════════════════════════════════ */
+function syncUI(){
+  document.getElementById('s-moves').textContent=moveCount;
+  document.getElementById('s-tiles').textContent=countTiles();
+  document.getElementById('btn-undo').disabled=undoStack.length===0;
+}
+
+function flashBorder(dir){
+  const id={up:'bs-t',down:'bs-b',left:'bs-l',right:'bs-r'}[dir];
+  const el=document.getElementById(id);
+  el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+}
+
+function litDpad(dir){
+  const el=document.getElementById('dp-'+dir);
+  if(!el) return;
+  el.classList.add('lit');
+  setTimeout(()=>el.classList.remove('lit'),180);
+}
+
+let arrowTimer=null;
+function showArrow(dir){
+  const sym={up:'↑',down:'↓',left:'←',right:'→'};
+  const el=document.getElementById('sarrow');
+  el.textContent=sym[dir]; el.classList.add('on');
+  clearTimeout(arrowTimer);
+  arrowTimer=setTimeout(()=>el.classList.remove('on'),300);
+}
+
+function showWin(){
+  // Unlock the next level when this one is completed
+  saveProgress(lvIdx + 1);
+  // Refresh NEXT button label now that we've unlocked the next level
+  const nextBtn = document.getElementById('btn-next');
+  if(lvIdx < LEVELS.length-1){
+    nextBtn.textContent = 'NEXT →';
+    nextBtn.disabled = false;
+    nextBtn.style.visibility = 'visible';
+  }
+
+  const isLast = lvIdx === LEVELS.length-1;
+  if(isLast){ document.getElementById('done-ov').classList.add('on'); return; }
+  const lv = LEVELS[lvIdx];
+  document.getElementById('ov-name').textContent  = lv.name+' DONE';
+  document.getElementById('ov-moves').textContent = moveCount+' MOVE'+(moveCount!==1?'S':'');
+  document.getElementById('win-ov').classList.add('on');
+  buildDots();
+}
+
+let toastTimer=null;
+function toast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>el.classList.remove('on'),2000);
+}
+
+/* ════════════════════════════════════════════════════════
+   INPUT — KEYBOARD  (arrows + WASD + Z=undo)
+════════════════════════════════════════════════════════ */
+document.addEventListener('keydown', e=>{
+  const map={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right',
+             w:'up',s:'down',a:'left',d:'right'};
+  if(map[e.key]){ e.preventDefault(); doMove(map[e.key]); }
+  if(e.key==='z'||e.key==='Z'){ e.preventDefault(); doUndo(); }
+});
+
+/* ════════════════════════════════════════════════════════
+   INPUT — D-PAD (non-passive touchstart → no 300ms delay)
+════════════════════════════════════════════════════════ */
+['up','down','left','right'].forEach(dir=>{
+  const el=document.getElementById('dp-'+dir);
+  el.addEventListener('touchstart', e=>{ e.preventDefault(); doMove(dir); },{passive:false});
+  el.addEventListener('click', ()=>doMove(dir));
+});
+
+/* ════════════════════════════════════════════════════════
+   INPUT — BOARD SWIPE
+   Three-layer scroll lock:
+     CSS   touch-action:none + overscroll-behavior:none
+     JS    non-passive touchstart/touchmove → e.preventDefault()
+     JS    document touchmove guard during active swipe
+════════════════════════════════════════════════════════ */
+const MIN_SWIPE=22;
+let tx0=0,ty0=0,touchLive=false;
+
+const bwrap=document.getElementById('bwrap');
+
+bwrap.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  tx0=e.touches[0].clientX; ty0=e.touches[0].clientY;
+  touchLive=true;
+},{passive:false});
+
+bwrap.addEventListener('touchmove',e=>{
+  e.preventDefault(); // kills pull-to-refresh + elastic scroll
+},{passive:false});
+
+bwrap.addEventListener('touchend',e=>{
+  if(!touchLive) return; touchLive=false;
+  const dx=e.changedTouches[0].clientX-tx0;
+  const dy=e.changedTouches[0].clientY-ty0;
+  const ax=Math.abs(dx), ay=Math.abs(dy);
+  if(ax<MIN_SWIPE&&ay<MIN_SWIPE) return;
+  if(ax>ay*1.2)      doMove(dx>0?'right':'left');
+  else if(ay>ax*1.2) doMove(dy>0?'down':'up');
+},{passive:true});
+
+document.addEventListener('touchmove',e=>{
+  if(touchLive) e.preventDefault();
+},{passive:false});
+
+/* ════════════════════════════════════════════════════════
+   BUTTONS
+════════════════════════════════════════════════════════ */
+document.getElementById('btn-restart').addEventListener('click',()=>initLevel(lvIdx));
+document.getElementById('btn-undo').addEventListener('click',doUndo);
+document.getElementById('btn-prev').addEventListener('click',()=>{ if(lvIdx>0) initLevel(lvIdx-1); });
+document.getElementById('btn-next').addEventListener('click',()=>{ if(lvIdx<LEVELS.length-1) initLevel(lvIdx+1); });
+document.getElementById('ov-next').addEventListener('click',()=>{ if(lvIdx<LEVELS.length-1) initLevel(lvIdx+1); });
+document.getElementById('ov-replay').addEventListener('click',()=>initLevel(lvIdx));
+document.getElementById('done-restart').addEventListener('click',()=>initLevel(0));
+
+window.addEventListener('resize',()=>{ applyLayout(); render(grid); });
+
+/* ════════════════════════════════════════════════════════
+   START
+════════════════════════════════════════════════════════ */
+// Start on the last level the player reached (or 0 if new)
+initLevel(unlockedUpTo > 0 ? unlockedUpTo : 0);
+// Show first-time hint only for new players
+if(unlockedUpTo === 0) toast('Swipe to play · arrow keys on desktop');
+</script>
+</body>
+</html>
